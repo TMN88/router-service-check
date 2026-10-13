@@ -1,0 +1,22 @@
+name: Validate Podkop VPN Failover adaptation
+
+on:
+  push:
+    branches: [podkop-vpn-failover-apk]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: |
+          sh -n install-pvf-apk.sh
+          sh -n podkop-vpn-failover
+          sh -n podkop-vpn-failover-control
+          sh -n podkop-vpn-failover.init
+          sh -n uninstall.sh
