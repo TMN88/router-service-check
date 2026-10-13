@@ -1,0 +1,123 @@
+#!/bin/sh
+
+INIT="/etc/init.d/podkop-vpn-failover"
+STATE_DIR="/tmp/podkop-vpn-failover"
+LOCK_DIR="/tmp/podkop-vpn-failover.lock"
+PID_FILE="${STATE_DIR}/pid"
+PROG="/usr/bin/podkop-vpn-failover"
+
+fail() {
+    printf '[ERROR] %s\n' "$*" >&2
+    exit 1
+}
+
+[ -x "$INIT" ] || fail "Failover init service was not found at ${INIT}."
+
+read_pid() {
+    [ -r "$PID_FILE" ] && cat "$PID_FILE" 2>/dev/null
+}
+
+pid_is_failover() {
+    local pid="$1" cmdline=""
+
+    case "$pid" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+
+    [ -d "/proc/${pid}" ] || return 1
+    [ -r "/proc/${pid}/cmdline" ] || return 1
+
+    cmdline="$(tr '\000' ' ' < "/proc/${pid}/cmdline" 2>/dev/null)"
+    case "$cmdline" in
+        *"${PROG}"*"daemon"*) return 0 ;;
+    esac
+
+    return 1
+}
+
+cleanup_stale_lock() {
+    local pid=""
+
+    pid="$(read_pid)"
+
+    if pid_is_failover "$pid"; then
+        return 1
+    fi
+
+    rm -f "$PID_FILE"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    return 0
+}
+
+wait_stopped() {
+    local old_pid="$1" attempt=0
+
+    while [ "$attempt" -lt 50 ]; do
+        if ! "$INIT" running >/dev/null 2>&1 && ! pid_is_failover "$old_pid"; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+
+    return 1
+}
+
+wait_running() {
+    local attempt=0
+    while [ "$attempt" -lt 5 ]; do
+        "$INIT" running >/dev/null 2>&1 && return 0
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+    return 1
+}
+
+case "${1:-}" in
+    start)
+        "$INIT" enable || fail "Failed to enable failover autostart."
+
+        if "$INIT" running >/dev/null 2>&1; then
+            printf 'Failover service is already running; autostart enabled.\n'
+            exit 0
+        fi
+
+        cleanup_stale_lock || fail "A failover daemon process is still running."
+        if ! "$INIT" start; then
+            "$INIT" disable >/dev/null 2>&1 || true
+            fail "Failed to start failover service; autostart disabled."
+        fi
+        if ! wait_running; then
+            "$INIT" stop >/dev/null 2>&1 || true
+            cleanup_stale_lock >/dev/null 2>&1 || true
+            "$INIT" disable >/dev/null 2>&1 || true
+            fail "Failover service did not stay running; autostart disabled."
+        fi
+        printf 'Failover service enabled and started.\n'
+        ;;
+    restart)
+        old_pid="$(read_pid)"
+        "$INIT" stop || fail "Failed to stop failover service."
+        wait_stopped "$old_pid" || fail "Old failover daemon did not stop within 50 seconds."
+        cleanup_stale_lock || fail "Old failover daemon is still running after stop."
+        "$INIT" start || fail "Failed to start failover service."
+        if ! wait_running; then
+            "$INIT" stop >/dev/null 2>&1 || true
+            cleanup_stale_lock >/dev/null 2>&1 || true
+            fail "Failover service did not stay running after restart."
+        fi
+        printf 'Failover service restarted.\n'
+        ;;
+    stop)
+        old_pid="$(read_pid)"
+        "$INIT" stop || fail "Failed to stop failover service."
+        wait_stopped "$old_pid" || fail "Failover daemon did not stop within 50 seconds."
+        cleanup_stale_lock || fail "Failover daemon is still running after stop."
+        "$INIT" disable || fail "Failed to disable failover autostart."
+        printf 'Failover service stopped and disabled.\n'
+        ;;
+    *)
+        printf 'Usage: %s {start|restart|stop}\n' "$0" >&2
+        exit 2
+        ;;
+esac
