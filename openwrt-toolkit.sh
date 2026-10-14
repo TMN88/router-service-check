@@ -35,7 +35,8 @@ ARCH="$(ubus call system board 2>/dev/null | jsonfilter -e '@.release.target' 2>
 if [ "$PM" = opkg ]; then
   ARCH_PACKAGES="$(opkg print-architecture 2>/dev/null | awk '$1=="arch" && $2!="all" {a=$2} END{print a}' || true)"
 else
-  ARCH_PACKAGES="$(apk --print-arch 2>/dev/null || true)"
+  ARCH_PACKAGES="$(. /etc/apk/arch 2>/dev/null; printf '%s' "${APK_ARCH:-}")"
+  [ -n "$ARCH_PACKAGES" ] || ARCH_PACKAGES="$(apk --print-arch 2>/dev/null || true)"
 fi
 MODEL="$(cat /tmp/sysinfo/model 2>/dev/null || printf 'неизвестна')"
 
@@ -141,11 +142,8 @@ if [ "$SELECT_PODKOP" = 1 ]; then
   run_remote_installer "Podkop" "https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh" || FAILS=$((FAILS+1))
 fi
 if [ "$SELECT_AWG" = 1 ]; then
-  # Flags documented by upstream: -e skips ru language, -n skips interface configuration.
-  # Keep translation enabled: run with -n only, so the script can install luci-i18n-amneziawg-ru,
-  # but it may still ask whether to install the translation; use -en to ensure no prompt is wrong.
-  # Upstream script supports -e (skip Russian) and -n (skip tunnel configuration); therefore -n
-  # leaves Russian language prompt, which is answered through a pseudo-terminal if available.
+  # Upstream supports -e (skip Russian) and -n (skip tunnel configuration).
+  # We answer "yes" to the optional Russian localization prompt and pass -n.
   AWG_SCRIPT="$BASE_TMP/amneziawg-install.sh"
   if fetch "https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/refs/heads/master/amneziawg-install.sh" "$AWG_SCRIPT" && sh -n "$AWG_SCRIPT"; then
     # Upstream installer asks whether to install the Russian language pack.
