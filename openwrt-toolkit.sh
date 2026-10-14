@@ -48,7 +48,8 @@ fetch(){
 }
 pkg_installed(){
   if [ "$PM" = apk ]; then apk info -e "$1" >/dev/null 2>&1
-  else opkg status "$1" 2>/dev/null | grep -q '^Status: install .* installed
+  else opkg status "$1" 2>/dev/null | grep -q '^Status: install .* installed$'; fi
+}
 pkg_update(){ if [ "$PM" = apk ]; then apk update; else opkg update; fi; }
 pkg_install(){
   name="$1"
