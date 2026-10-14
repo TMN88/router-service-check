@@ -141,9 +141,20 @@ FAILS=0
 if [ "$SELECT_PODKOP" = 1 ]; then
   PODKOP_SCRIPT="$BASE_TMP/podkop-install.sh"
   if fetch "https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh" "$PODKOP_SCRIPT" && sh -n "$PODKOP_SCRIPT"; then
-    # Podkop asks about Russian localization; answer yes. Other safety prompts, such as removing
-    # conflicting https-dns-proxy or upgrading old configs, are intentionally not auto-accepted.
-    printf 'y\n' | sh "$PODKOP_SCRIPT" || FAILS=$((FAILS+1))
+    # Patch only the Russian-language question to be unattended. Configuration migrations
+    # and removal of conflicting packages remain interactive and are never auto-approved.
+    awk '
+      /read -r -p .*CONFIG_UPDATE/ { print "            read -r -p \047\047 CONFIG_UPDATE"; next }
+      /read -r -p .*DNSPROXY/ { print "                read -r -p \047\047 DNSPROXY"; next }
+      /read -r -p .*RUS/ { print "                printf \047y\\n\047; read -r -p \047\047 RUS"; next }
+      { print }
+    ' "$PODKOP_SCRIPT" > "$BASE_TMP/podkop-installer-local.sh"
+    if sh -n "$BASE_TMP/podkop-installer-local.sh"; then
+      sh "$BASE_TMP/podkop-installer-local.sh" || FAILS=$((FAILS+1))
+    else
+      err "Не удалось подготовить автоматический выбор русского языка для Podkop."
+      FAILS=$((FAILS+1))
+    fi
   else
     err "Не удалось скачать/проверить официальный установщик Podkop."
     FAILS=$((FAILS+1))
