@@ -37,3 +37,15 @@ wget -O /tmp/openwrt-toolkit.sh https://raw.githubusercontent.com/TMN88/router-s
 ## Совместимость
 
 Основной расчёт — OpenWrt 24.10 (`opkg`) и 25.12 (`apk`). AWG Test пока запускается только в системах с `opkg`, поскольку это ограничение оригинального установщика. Zapret2 из пакетов Routerich предназначен только для `aarch64_cortex-a53` и совместимой версии OpenWrt. Проверяйте, что обычный Zapret не установлен: два компонента одновременно несовместимы.
+
+## Отдельная быстрая проверка сайтов
+
+В репозитории также остаётся компактный скрипт [`check-services.sh`](check-services.sh). Он выполняет быстрые HTTP(S)-проверки YouTube, Instagram, Telegram и WhatsApp прямо с роутера; для работы нужен `curl`.
+
+Запуск установленного файла:
+
+```sh
+sh check-services.sh
+```
+
+Это только проверка доступности, а не установка приложения. Полноценная версия Site Checker с интерфейсом LuCI находится в отдельном проекте: [TMN88/Site_Checker](https://github.com/TMN88/Site_Checker).
