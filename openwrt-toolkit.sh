@@ -32,7 +32,11 @@ fi
 RELEASE="$(sed -n "s/^DISTRIB_RELEASE='\([^']*\)'.*/\1/p" /etc/openwrt_release | head -n1)"
 VERSION_MAJOR="$(printf '%s' "$RELEASE" | cut -d. -f1)"
 ARCH="$(ubus call system board 2>/dev/null | jsonfilter -e '@.release.target' 2>/dev/null || true)"
-ARCH_PACKAGES="$(opkg print-architecture 2>/dev/null | awk '$1=="arch" && $2!="all" {a=$2} END{print a}' || true)"
+if [ "$PM" = opkg ]; then
+  ARCH_PACKAGES="$(opkg print-architecture 2>/dev/null | awk '$1=="arch" && $2!="all" {a=$2} END{print a}' || true)"
+else
+  ARCH_PACKAGES="$(apk --print-arch 2>/dev/null || true)"
+fi
 MODEL="$(cat /tmp/sysinfo/model 2>/dev/null || printf 'неизвестна')"
 
 fetch(){
@@ -142,7 +146,15 @@ if [ "$SELECT_AWG" = 1 ]; then
   # but it may still ask whether to install the translation; use -en to ensure no prompt is wrong.
   # Upstream script supports -e (skip Russian) and -n (skip tunnel configuration); therefore -n
   # leaves Russian language prompt, which is answered through a pseudo-terminal if available.
-  run_remote_installer "AmneziaWG" "https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/refs/heads/master/amneziawg-install.sh" -n || FAILS=$((FAILS+1))
+  AWG_SCRIPT="$BASE_TMP/amneziawg-install.sh"
+  if fetch "https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/refs/heads/master/amneziawg-install.sh" "$AWG_SCRIPT" && sh -n "$AWG_SCRIPT"; then
+    # Upstream installer asks whether to install the Russian language pack.
+    # Answer yes, and pass -n to avoid creating/configuring a tunnel.
+    printf 'y\n' | sh "$AWG_SCRIPT" -n || FAILS=$((FAILS+1))
+  else
+    err "Не удалось скачать/проверить официальный установщик AmneziaWG."
+    FAILS=$((FAILS+1))
+  fi
 fi
 if [ "$SELECT_ZM" = 1 ]; then
   run_remote_installer "Zapret Manager" "https://raw.githubusercontent.com/StressOzz/Zapret-Manager/refs/heads/main/ZapretManager_LuCI.sh" || FAILS=$((FAILS+1))
@@ -153,7 +165,7 @@ if [ "$SELECT_Z2" = 1 ]; then
   if [ -f /etc/init.d/zapret ] || pkg_installed zapret; then
     err "Найден обычный Zapret. Удалите его перед установкой Zapret2: эти компоненты несовместимы."
     FAILS=$((FAILS+1))
-  elif [ "${ARCH_PACKAGES:-}" != "aarch64_cortex-a53" ] && ! printf '%s' "$ARCH" | grep -q 'mediatek/filogic'; then
+  elif [ "${ARCH_PACKAGES:-}" != "aarch64_cortex-a53" ]; then
     err "Zapret2 от Routerich поддерживает aarch64_cortex-a53. Определённая архитектура: ${ARCH_PACKAGES:-$ARCH}"
     FAILS=$((FAILS+1))
   else
