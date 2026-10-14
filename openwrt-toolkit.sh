@@ -230,7 +230,12 @@ if [ "$SELECT_Z2" = 1 ]; then
           fetch "https://raw.githubusercontent.com/StressOzz/Zapret-Manager/refs/heads/main/files/Zapret2/zapret2" "$BASE_TMP/zapret2-config" || warn "Не удалось получить базовую конфигурацию Zapret2."
           fetch "https://raw.githubusercontent.com/StressOzz/Zapret-Manager/refs/heads/main/files/Zapret2/zapret_hosts_discord.txt" "$BASE_TMP/zapret_hosts_discord.txt" || true
           fetch "https://raw.githubusercontent.com/StressOzz/Zapret-Manager/refs/heads/main/files/Zapret2/50-discord_media.sh" "$BASE_TMP/50-discord_media.sh" || true
-          if [ -f "$BASE_TMP/zapret2-config" ]; then cp "$BASE_TMP/zapret2-config" /etc/config/zapret2; fi
+          if [ -f "$BASE_TMP/zapret2-config" ]; then
+            if [ -f /etc/config/zapret2 ]; then
+              cp /etc/config/zapret2 "/etc/config/zapret2.bak.$(date +%Y%m%d%H%M%S)" || warn "Не удалось сохранить предыдущий конфиг Zapret2."
+            fi
+            cp "$BASE_TMP/zapret2-config" /etc/config/zapret2
+          fi
           if [ -f "$BASE_TMP/zapret_hosts_discord.txt" ]; then cp "$BASE_TMP/zapret_hosts_discord.txt" /opt/zapret2/ipset/zapret_hosts_discord.txt; fi
           if [ -f "$BASE_TMP/50-discord_media.sh" ]; then cp "$BASE_TMP/50-discord_media.sh" /opt/zapret2/init.d/openwrt/custom.d/50-discord_media.sh; chmod 755 /opt/zapret2/init.d/openwrt/custom.d/50-discord_media.sh; fi
           if [ -x /etc/init.d/zapret2 ]; then /etc/init.d/zapret2 enable && /etc/init.d/zapret2 restart && ok "Zapret2 установлен и запущен." || { err "Zapret2 установлен, но запуск не удался."; FAILS=$((FAILS+1)); }
